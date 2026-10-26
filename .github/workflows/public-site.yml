@@ -1,0 +1,89 @@
+name: Verify public HTTPS site
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: Public HTTPS address
+        required: true
+        default: https://obihush.site
+  push:
+    branches: [codex/obhush-deployment]
+    paths:
+      - .github/workflows/public-site.yml
+
+permissions: {}
+
+jobs:
+  public-https:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify TLS, API, interface assets and terrain from an external network
+        env:
+          PUBLIC_SITE_URL: ${{ inputs.site || 'https://obihush.site' }}
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { setTimeout as delay } from 'node:timers/promises';
+          import { appendFile } from 'node:fs/promises';
+
+          const base = new URL(process.env.PUBLIC_SITE_URL);
+          assert.equal(base.protocol, 'https:');
+          assert.equal(base.username + base.password, '');
+          async function get(path) {
+            const response = await fetch(new URL(path, base), {
+              signal: AbortSignal.timeout(12000), redirect: 'error',
+            });
+            assert.equal(response.status, 200, `GET ${path}`);
+            return response;
+          }
+          let health;
+          let lastError;
+          for (let attempt = 0; attempt < 12; attempt++) {
+            try {
+              health = await (await get('/api/health')).json();
+              assert.equal(health.status, 'ok');
+              assert.equal(health.service, 'obhush');
+              break;
+            } catch (error) {
+              health = undefined;
+              lastError = error;
+              console.log(`Waiting for public HTTPS: attempt ${attempt + 1}/12`);
+              if (attempt < 11) await delay(10000);
+            }
+          }
+          if (!health) throw lastError;
+
+          const data = await (await get('/api/data')).json();
+          assert.equal(data.snapshot.weather.length, 3);
+          const series = data.snapshot.river.daily;
+          assert.ok(series.time.length >= 180);
+          assert.equal(series.river_discharge.length, series.time.length);
+
+          const html = await (await get('/')).text();
+          assert.match(html, /<div id="root">/);
+          assert.match(html, /ОБҲУШ/);
+          const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(match => match[1]);
+          assert.ok(assets.some(path => path.endsWith('.js')));
+          assert.ok(assets.some(path => path.endsWith('.css')));
+          for (const asset of assets) {
+            const response = await get(asset);
+            assert.doesNotMatch(response.headers.get('content-type') || '', /text\/html/);
+            assert.ok((await response.arrayBuffer()).byteLength > 0);
+          }
+          const terrain = await (await get('/terrain.json')).json();
+          assert.equal(terrain.width * terrain.height, 30720);
+          const geography = await (await get('/geography.json')).json();
+          assert.ok(geography && typeof geography === 'object');
+          const font = await get('/fonts/Manrope.ttf');
+          assert.ok((await font.arrayBuffer()).byteLength > 1000);
+
+          const summary = `Public HTTPS verified: ${base.origin}\n` +
+            `Certificate validation enabled; health and data APIs work; ${assets.length} interface assets, terrain and font load.\n` +
+            `Weather points: ${data.snapshot.weather.length}; river days: ${series.time.length}; data retrieved: ${data.snapshot.retrievedAt}.\n` +
+            `External assistant key configured: ${Boolean(health.assistantAvailable)}. No assistant requests or data refreshes were made.\n`;
+          console.log(summary);
+          if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);
+          JS
