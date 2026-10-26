@@ -57,3 +57,9 @@ test('an AI answer cannot present added scenario rain as the actual forecast',as
     assert.equal(result.mode,'local');assert.match(result.answer,/сценарий с дополнительным дождём, а не реальный прогноз/);
   });
 });
+test('provider classification text is not presented as a meaningful localized AI answer',async()=>{
+  await provider(async()=>new Response(JSON.stringify({choices:[{message:{content:'User Safety: safe'}}]})),async()=>{
+    const result=await answerQuestion('Есть ли условия для селя?','ru',DEFAULT_PARAMETERS,snapshot,{pointId:'rasht',date:snapshot.today});
+    assert.equal(result.mode,'local');assert.match(result.answer,/Рашт/);assert.doesNotMatch(result.answer,/User Safety/);
+  });
+});

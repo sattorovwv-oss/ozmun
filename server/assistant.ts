@@ -41,7 +41,7 @@ export async function answerQuestion(message:string,language:Language,parameters
     if(!response.ok)throw new Error(`LLM provider returned ${response.status}`);
     const body=await response.json() as {choices?:{message?:{content?:string}}[]};
     const answer=body.choices?.[0]?.message?.content?.trim();
-    if(!answer)throw new Error('Empty language-model response');
+    if(!answer||answer.length<24||(answer.match(/[А-Яа-яЁёҒғҚқҲҳҶҷӢӣӮӯ]/g)?.length||0)<5)throw new Error('Provider returned no meaningful localized answer');
     if(/Analyze the Request|Extract Relevant Data|<think>|Chain.of.thought/i.test(answer))throw new Error('Provider returned analysis instead of an answer');
     if(hazardQuestion&&(/\d+(?:[.,]\d+)?\s*%/.test(answer)||/полностью безопасн|сель исключ[её]н|паводок исключ[её]н|селя не будет|паводка не будет/i.test(answer)))throw new Error('Unsupported risk certainty');
     if(hazardQuestion&&selectedConditions.scenario&&!/сценари|сенария/i.test(answer))throw new Error('A hypothetical rainfall scenario must be labelled');
