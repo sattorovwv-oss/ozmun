@@ -1,5 +1,5 @@
 export type Language = 'ru' | 'tj';
-export type Page = 'overview' | 'scenarios' | 'forecast' | 'sources';
+export type Page = 'overview' | 'map' | 'safety' | 'scenarios' | 'forecast' | 'sources';
 export interface DailyWeather {
   time: string[];
   temperature_2m_mean: (number | null)[];

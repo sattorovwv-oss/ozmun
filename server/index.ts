@@ -10,11 +10,12 @@ app.disable('x-powered-by');
 app.use(express.json({limit:'32kb'}));
 app.use((_req,res,next)=>{res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');next();});
 const ParametersSchema=z.object({capacity:z.number(),initialStorage:z.number(),release:z.number(),inflowChange:z.number(),irrigationDemand:z.number(),head:z.number(),efficiency:z.number(),turbineLimit:z.number(),area:z.number(),evaporation:z.number(),reservePercent:z.number()}).strict();
-const QuestionSchema=z.object({message:z.string().trim().min(1).max(3000),language:z.enum(['ru','tj']),parameters:ParametersSchema});
+const QuestionSchema=z.object({message:z.string().trim().min(1).max(3000),language:z.enum(['ru','tj']),parameters:ParametersSchema,
+  monitoring:z.object({pointId:z.enum(['nurek','rasht','upper']).optional(),date:z.iso.date().optional(),addedRain:z.number().min(0).max(60).optional()}).optional()});
 let lastRefresh=0;
 const visits=new Map<string,{count:number;start:number}>();
 
-app.get('/api/health',(_req,res)=>res.json({status:'ok',service:'obhush',assistantAvailable:Boolean(process.env.LLM_API_KEY)}));
+app.get('/api/health',(_req,res)=>res.json({status:'ok',service:'obhush',interfaceVersion:2,assistantAvailable:Boolean(process.env.LLM_API_KEY)}));
 app.get('/api/data',async(_req,res)=>{
   try{
     const snapshot=await loadSnapshot();
@@ -39,7 +40,7 @@ app.post('/api/assistant',async(req,res)=>{
   if(!visit||Date.now()-visit.start>60000){visit={count:0,start:Date.now()};visits.set(ip,visit);}
   if(visit.count++>=12){res.status(429).json({error:'Too many questions. Please wait a minute.'});return;}
   if(visits.size>1000)for(const [key,value]of visits)if(Date.now()-value.start>60000)visits.delete(key);
-  try{res.json(await answerQuestion(parsed.data.message,parsed.data.language,parsed.data.parameters,await loadSnapshot()));}
+  try{res.json(await answerQuestion(parsed.data.message,parsed.data.language,parsed.data.parameters,await loadSnapshot(),parsed.data.monitoring));}
   catch{res.status(502).json({error:'The assistant service is unavailable. Your data and scenario calculations are unaffected.'});}
 });
 app.use('/api',(_req,res)=>res.status(404).json({error:'Unknown API endpoint'}));

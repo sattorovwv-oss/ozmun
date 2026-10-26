@@ -42,3 +42,18 @@ test('paid model configuration cannot accidentally route a free-only installatio
   try{assert.equal((await answerQuestion('Какие источники данных?','ru',DEFAULT_PARAMETERS,snapshot)).mode,'llm');}
   finally{globalThis.fetch=savedFetch;if(key===undefined)delete process.env.LLM_API_KEY;else process.env.LLM_API_KEY=key;if(model===undefined)delete process.env.LLM_MODEL;else process.env.LLM_MODEL=model;}
 });
+
+test('unsupported AI debris-flow probabilities fall back to the selected rainfall scenario',async()=>{
+  await provider(async()=>new Response(JSON.stringify({choices:[{message:{content:'Вероятность селя 80%. Полностью безопасно.'}}]})),async()=>{
+    const result=await answerQuestion('Есть ли опасность селя?','ru',DEFAULT_PARAMETERS,snapshot,{pointId:'rasht',date:snapshot.today,addedRain:30});
+    assert.equal(result.mode,'local');assert.match(result.answer,/Рашт/);assert.match(result.answer,/30 мм/);
+    assert.match(result.answer,/сценарий/);assert.match(result.answer,/не являются нормами или предупреждениями/);
+    assert.doesNotMatch(result.answer,/80%|Полностью безопасно/);
+  });
+});
+test('an AI answer cannot present added scenario rain as the actual forecast',async()=>{
+  await provider(async()=>new Response(JSON.stringify({choices:[{message:{content:'В Раште ожидается 30 мм дождя. Следите за погодой.'}}]})),async()=>{
+    const result=await answerQuestion('Что означает сигнал дождя?','ru',DEFAULT_PARAMETERS,snapshot,{pointId:'rasht',date:snapshot.today,addedRain:30});
+    assert.equal(result.mode,'local');assert.match(result.answer,/сценарий с дополнительным дождём, а не реальный прогноз/);
+  });
+});

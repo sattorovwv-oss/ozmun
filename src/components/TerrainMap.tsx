@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Layers3, Maximize2, Minus, Mountain, Plus, RotateCcw, Waves, X } from 'lucide-react';
 import type { Language } from '../../shared/types';
 import { strings } from '../i18n';
+import '../terrain.css';
 
 interface Terrain {bounds:number[];width:number;height:number;elevations:number[];retrievedAt:string}
 interface Point{id:string;name:string;nameTj:string;lon:number;lat:number;kind:string}
@@ -176,7 +177,7 @@ export default function TerrainMap({language,storagePercent,onSelect}:{language:
       <button title={t.resetView} aria-label={t.resetView} onClick={()=>{setFlat(false);controls.current?.reset();}}><RotateCcw size={15}/></button>
       <button title={expanded?t.close:t.expand} aria-label={expanded?t.close:t.expand} onClick={()=>setExpanded(v=>!v)}>{expanded?<X size={17}/>:<Maximize2 size={16}/>}</button>
     </div>
-    {selected&&<div className="map-info"><button aria-label={t.close} onClick={()=>setSelected(null)}><X size={14}/></button><b>{selected==='nurek'?(language==='ru'?'Нурекская ГЭС':'НБО-и Норак'):selected==='rogun'?(language==='ru'?'Рогунская ГЭС':'НБО-и Роғун'):selected==='garm'?'Рашт':(language==='ru'?'Верховья':'Болооб')}</b><span>{selected==='nurek'||selected==='rogun'?t.modelParameters:t.pointWeather}</span>{selected==='nurek'&&<strong>{Math.round(storagePercent)}% <small>{t.storage.toLowerCase()}</small></strong>}</div>}
+    {selected&&<div className="map-info"><button aria-label={t.close} onClick={()=>setSelected(null)}><X size={14}/></button><b>{selected==='nurek'?(language==='ru'?'Нурек':'Норак'):selected==='rogun'?(language==='ru'?'Рогун':'Роғун'):selected==='garm'?'Рашт':(language==='ru'?'Верховья':'Болооб')}</b><span>{language==='ru'?'Географический ориентир. Погода доступна в панели выбранной точки.':'Нишонаи ҷуғрофӣ. Обу ҳаво дар панели нуқтаи интихобшуда дастрас аст.'}</span></div>}
     <div className="map-attribution"><span><Layers3 size={12}/>{t.terrainReal}</span><span>{error?'2D':t.heightScale}</span><span>{t.schematic}</span></div>
     {!ready&&<div className="map-loading"><span className="spinner"/></div>}
   </section>;

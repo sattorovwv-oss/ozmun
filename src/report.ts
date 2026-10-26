@@ -1,5 +1,14 @@
 import type { Language, Parameters, Simulation, Snapshot } from '../shared/types';
 import { strings, num } from './i18n';
+import { monitoringStrings, signalText } from './monitoring-i18n';
+import { monitoringOverview } from '../shared/monitoring';
+
+export function exportMonitoringReport(language:Language,snapshot:Snapshot){
+  const t=monitoringStrings(language),overview=monitoringOverview(snapshot);
+  const rows=overview.all.map(c=>`<tr><td>${esc(language==='ru'?c.point.name:c.point.nameTj)}</td><td>${esc(c.date)}</td><td>${c.rain===null?'—':num(c.rain,1)}</td><td>${c.temperature===null?'—':num(c.temperature,1)}</td><td>${esc(signalText(c.level,language))}</td></tr>`).join('');
+  const content=`<!doctype html><html lang="${language==='ru'?'ru':'tg'}"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(t.reportTitle)}</title><style>body{font:15px/1.6 system-ui;color:#193b42;max-width:1000px;margin:40px auto;padding:0 24px}h1{font-size:40px}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:9px;text-align:left;border-bottom:1px solid #dce5e4}th{background:#eff6f5}aside{padding:18px;background:#edf5f4;margin:24px 0}a{color:#147e87}button{border:0;border-radius:6px;background:#147e87;color:white;padding:10px 18px}@media print{button{display:none}body{margin:0}}</style><button onclick="window.print()">PDF / Print</button><h1>ОБҲУШ</h1><h2>${esc(t.reportTitle)}</h2><p>${esc(t.region)} · ${esc(t.country)}</p><p>${esc(t.updated)}: ${esc(snapshot.retrievedAt)}</p><aside>${esc(t.signalNote)} ${esc(t.signalsText)}<br>${esc(t.quietThreshold)} / ${esc(t.watchThreshold)} / ${esc(t.attentionThreshold)}</aside><table><thead><tr><th>${esc(t.locations)}</th><th>${esc(t.date)}</th><th>${esc(t.rain)} (мм / 24 ч)</th><th>${esc(t.temperature)} (°C)</th><th>${esc(t.weather)}</th></tr></thead><tbody>${rows}</tbody></table><p>${esc(t.forecastData)} · <a href="https://open-meteo.com/en/docs">open-meteo.com</a></p><p><a href="https://kchs.tj/">${esc(t.official)}</a></p></html>`;
+  downloadBlob(content,`obhush-water-overview-${snapshot.today}.html`,'text/html;charset=utf-8');
+}
 
 export function downloadBlob(content:string,name:string,type:string){
   const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
