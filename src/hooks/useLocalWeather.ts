@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LocationChoice, WeatherPayload } from '../../shared/local-weather';
+import { weatherIsStale } from '../../shared/local-weather';
 
 export function useLocalWeather(location:LocationChoice){
   const key=JSON.stringify(location);
@@ -37,7 +38,9 @@ export function useLocalWeather(location:LocationChoice){
     setPayload(null);void load();
     const timer=setInterval(()=>{if(document.visibilityState==='visible')void load();},10*60000);
     const online=()=>void load(true);window.addEventListener('online',online);
-    return()=>{active.current?.abort();clearInterval(timer);window.removeEventListener('online',online);};
+    const visible=()=>{if(document.visibilityState==='visible')void load();};document.addEventListener('visibilitychange',visible);
+    return()=>{active.current?.abort();clearInterval(timer);window.removeEventListener('online',online);document.removeEventListener('visibilitychange',visible);};
   },[load]);
-  return {payload:payloadKey.current===key?payload:null,loading:loading||(!error&&payloadKey.current!==key),error,refresh:()=>void load(true)};
+  const visiblePayload=payloadKey.current===key&&payload?{...payload,stale:payload.stale||weatherIsStale(payload.weather)}:null;
+  return {payload:visiblePayload,loading:loading||(!error&&payloadKey.current!==key),error,refresh:()=>void load(true)};
 }
