@@ -15,6 +15,7 @@ on:
       - server/**
       - public/**
       - data/snapshot.json
+      - data/weather-dushanbe.json
       - deploy/compose.yml
       - scripts/check-container.mjs
 

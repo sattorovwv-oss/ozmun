@@ -1,6 +1,6 @@
-import { Component, useEffect, useMemo, useState } from 'react';
+import { Component, Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowDownToLine, ArrowRight, Bell, Check, ChevronRight, CircleHelp, Database, LayoutDashboard, Map, MapPin, Menu, Play, RefreshCw, ShieldCheck, Sparkles, Waves, WifiOff, X, Zap } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeft, ArrowRight, Bell, Check, ChevronRight, CircleHelp, Database, LayoutDashboard, Map, MapPin, Menu, Play, RefreshCw, ShieldCheck, Sparkles, Waves, WifiOff, X, Zap } from 'lucide-react';
 import type { DatasetResponse, Language, Measurement, Page, Parameters } from '../shared/types';
 import { DEFAULT_PARAMETERS, simulate, validateParameters } from '../shared/model';
 import { getInflowForecast } from '../shared/forecast';
@@ -12,6 +12,7 @@ import { Assistant } from './components/Assistant';
 import { Presentation } from './components/Presentation';
 import { MonitoringDashboard, SafetyPage, WeatherForecast } from './components/Monitoring';
 import { exportMonitoringReport, exportReport } from './report';
+const Home=lazy(()=>import('./components/Home'));
 
 function stored<T>(name:string,fallback:T):T { try { const raw=localStorage.getItem(name);return raw?JSON.parse(raw):fallback; } catch { return fallback; } }
 function initialParameters() { const p=stored('obhush-parameters',DEFAULT_PARAMETERS);try {validateParameters(p);return p;} catch {return DEFAULT_PARAMETERS;} }
@@ -19,11 +20,19 @@ class ErrorBoundary extends Component<{children:ReactNode},{error:boolean}> {
   state={error:false};static getDerivedStateFromError(){return {error:true};}
   render(){return this.state.error?<div className="fatal-error"><img src="/favicon.svg" alt=""/><h1>ОБҲУШ</h1><p>Не удалось загрузить страницу. Попробуйте ещё раз.</p><button className="button primary" onClick={()=>{localStorage.removeItem('obhush-parameters');location.reload();}}>Перезагрузить</button></div>:this.props.children;}
 }
-export default function App(){return <ErrorBoundary><Workspace/></ErrorBoundary>;}
-
-function Workspace(){
+export default function App(){
   const [language,setLanguage]=useState<Language>(()=>stored<string>('obhush-language','ru')==='tj'?'tj':'ru');
-  const [page,setPage]=useState<Page>('overview');
+  const [showWater,setShowWater]=useState(()=>new URLSearchParams(location.search).get('view')==='water');
+  const [initialPage,setInitialPage]=useState<Page>('overview');
+  useEffect(()=>{localStorage.setItem('obhush-language',JSON.stringify(language));document.documentElement.lang=language==='tj'?'tg':'ru';},[language]);
+  useEffect(()=>{const change=()=>setShowWater(new URLSearchParams(location.search).get('view')==='water');window.addEventListener('popstate',change);return()=>window.removeEventListener('popstate',change);},[]);
+  const open=(page:Page='overview')=>{const url=new URL(location.href);url.searchParams.set('view','water');history.pushState(null,'',url);setInitialPage(page);setShowWater(true);window.scrollTo(0,0);};
+  const home=()=>{const url=new URL(location.href);url.searchParams.delete('view');history.pushState(null,'',url);setShowWater(false);window.scrollTo(0,0);};
+  return <ErrorBoundary>{showWater?<Workspace language={language} setLanguage={setLanguage} onHome={home} initialPage={initialPage}/>:<Suspense fallback={<div className="loading-screen"><Waves size={36}/><h2>ОБҲУШ</h2></div>}><Home language={language} setLanguage={setLanguage} onExplore={open}/></Suspense>}</ErrorBoundary>;
+}
+
+function Workspace({language,setLanguage,onHome,initialPage}:{language:Language;setLanguage:(value:Language)=>void;onHome:()=>void;initialPage:Page}){
+  const [page,setPage]=useState<Page>(initialPage);
   const [data,setData]=useState<DatasetResponse|null>(null);
   const [parameters,setParameters]=useState<Parameters>(initialParameters);
   const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(false);
@@ -34,7 +43,7 @@ function Workspace(){
   const t=strings(language),m=monitoringStrings(language);
   const notify=(text:string,error=false)=>setToast({text,error,id:Date.now()});
   useEffect(()=>{if(toast){const timer=setTimeout(()=>setToast(null),5500);return()=>clearTimeout(timer);}},[toast]);
-  useEffect(()=>{localStorage.setItem('obhush-language',JSON.stringify(language));document.documentElement.lang=language==='tj'?'tg':'ru';},[language]);
+  useEffect(()=>setPage(initialPage),[initialPage]);
   useEffect(()=>{localStorage.setItem('obhush-parameters',JSON.stringify(parameters));},[parameters]);
   useEffect(()=>{const off=()=>setOffline(true),on=()=>setOffline(false);window.addEventListener('offline',off);window.addEventListener('online',on);return()=>{window.removeEventListener('offline',off);window.removeEventListener('online',on);};},[]);
   const load=async()=>{
@@ -69,7 +78,7 @@ function Workspace(){
   return <div className="app-shell"><a href="#main-content" className="skip-link">{language==='ru'?'К содержимому':'Ба муҳтаво'}</a>
     {mobileNav&&<button className="mobile-backdrop" onClick={()=>setMobileNav(false)} aria-label={t.close}/>}
     <aside className={`sidebar ${mobileNav?'open':''}`}>
-      <a className="brand" href="#" onClick={event=>{event.preventDefault();go('overview');}}><span className="brand-mark"><Waves size={26}/></span><div><b>ОБҲУШ<span>.</span></b><small>{m.product}</small></div></a>
+      <button className="return-to-consumer" onClick={onHome}><ArrowLeft size={13}/>{language==='ru'?'На главную':'Ба саҳифаи асосӣ'}</button><a className="brand" href="/" onClick={event=>{event.preventDefault();onHome();}}><span className="brand-mark"><Waves size={26}/></span><div><b>ОБҲУШ<span>.</span></b><small>{m.product}</small></div></a>
       <div className="region-select"><span className="region-icon"><MapPin size={17}/></span><div><strong>{m.region}</strong><span>{m.country}</span></div><ChevronRight size={14}/></div>
       <div className="nav-label">{m.section}</div><nav aria-label={m.section}>{nav.map(item=><button key={item.id} className={page===item.id?'active':''} aria-current={page===item.id?'page':undefined} onClick={()=>go(item.id)}><item.icon size={19}/><span>{item.label}</span>{page===item.id&&<ChevronRight size={14}/>}</button>)}</nav>
       <div className="nav-label advanced-nav-label">{m.tools}</div><button className={`advanced-nav ${page==='scenarios'?'active':''}`} onClick={()=>go('scenarios')}><Zap size={18}/>{m.scenarios}<span>LAB</span></button>

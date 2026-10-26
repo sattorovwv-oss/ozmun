@@ -4,7 +4,7 @@ import { shortDate } from '../../src/i18n';
 test('clear overview, selected date and location, explainable rain scenario and map controls',async({page,request})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   const {snapshot}=await (await request.get('/api/data')).json();
-  await page.goto('/');await expect(page.getByRole('heading',{name:'Вода под наблюдением.',exact:true})).toBeVisible();
+  await page.goto('/?view=water');await expect(page.getByRole('heading',{name:'Вода под наблюдением.',exact:true})).toBeVisible();
   await expect(page.getByRole('group',{name:'Карта погодных точек бассейна Вахша'})).toBeVisible();
   await expect(page.locator('.point-detail h2')).toHaveText('Рашт');
   const rasht=snapshot.weather.find((p:{id:string})=>p.id==='rasht');
@@ -25,7 +25,7 @@ test('clear overview, selected date and location, explainable rain scenario and 
 });
 
 test('weekly weather opens the requested map day and exposes technical ML validation only on demand',async({page})=>{
-  await page.goto('/');await page.getByRole('navigation').getByRole('button',{name:'Прогноз на 7 дней',exact:true}).click();
+  await page.goto('/?view=water');await page.getByRole('navigation').getByRole('button',{name:'Прогноз на 7 дней',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Ближайшая неделя — понятнее.',exact:true})).toBeVisible();
   await expect(page.locator('.forecast-day')).toHaveCount(7);
   await page.locator('.technical-details summary').click();
@@ -37,7 +37,7 @@ test('weekly weather opens the requested map day and exposes technical ML valida
 });
 
 test('source transparency, retained research module, CSV import and monitoring report export',async({page})=>{
-  await page.goto('/');await page.getByRole('navigation').getByRole('button',{name:'Откуда данные',exact:true}).click();
+  await page.goto('/?view=water');await page.getByRole('navigation').getByRole('button',{name:'Откуда данные',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Погодные сигналы внимания',exact:true})).toBeVisible();
   await page.getByLabel('Загрузить CSV',{exact:true}).setInputFiles({name:'measurements.csv',mimeType:'text/csv',buffer:Buffer.from('date,storage_mcm,inflow_m3s,release_m3s\n2026-10-20,2600,300,500\n')});
   await page.getByRole('button',{name:'Использовать последний запас',exact:true}).click();
@@ -53,7 +53,7 @@ test('source transparency, retained research module, CSV import and monitoring r
 });
 
 test('water-safety assistant, revised presentation and Tajik localization',async({page})=>{
-  await page.goto('/');await expect(page.getByRole('heading',{name:'Вода под наблюдением.',exact:true})).toBeVisible();
+  await page.goto('/?view=water');await expect(page.getByRole('heading',{name:'Вода под наблюдением.',exact:true})).toBeVisible();
   await page.locator('.sidebar-assistant').getByRole('button',{name:'Спросить ИИ',exact:true}).click();
   await page.getByLabel('Спросите о воде, дожде или опасности…').fill('Есть ли опасность селя в Раште?');
   await page.getByRole('button',{name:'Отправить',exact:true}).click();
@@ -69,7 +69,7 @@ test('water-safety assistant, revised presentation and Tajik localization',async
 });
 
 test('mobile map labels remain readable, navigation and safety guidance work without overflow',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await page.goto('/');
+  await page.setViewportSize({width:390,height:844});await page.goto('/?view=water');
   await expect(page.getByRole('heading',{name:'Вода под наблюдением.',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Нурек',exact:true}).click();await expect(page.locator('.point-detail h2')).toHaveText('Нурек');
   const markerText=page.locator('.weather-map-marker .marker-name').first();
@@ -91,7 +91,7 @@ test('API rejects invalid scenario and monitoring context',async({request})=>{
 });
 
 test('offline fallback preserves the map and rainfall analysis after API or upstream failures',async({page})=>{
-  await page.goto('/');await expect(page.getByRole('heading',{name:'Вода под наблюдением.',exact:true})).toBeVisible();
+  await page.goto('/?view=water');await expect(page.getByRole('heading',{name:'Вода под наблюдением.',exact:true})).toBeVisible();
   await page.route('**/api/refresh',route=>route.fulfill({status:502,contentType:'application/json',body:'{"error":"Upstream unavailable"}'}));
   await page.getByRole('button',{name:'Обновить',exact:true}).click();await expect(page.locator('.toast')).toContainText('Сохранённый набор');
   await page.route('**/api/data',route=>route.abort());await page.reload();
@@ -102,7 +102,7 @@ test('offline fallback preserves the map and rainfall analysis after API or upst
 
 test('real 3D terrain remains available as a secondary view',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/');await page.getByRole('button',{name:'Рельеф 3D',exact:true}).click();
+  await page.goto('/?view=water');await page.getByRole('button',{name:'Рельеф 3D',exact:true}).click();
   await expect(page.locator('.map-canvas canvas')).toBeVisible();
   await page.getByRole('button',{name:'2D',exact:true}).click();await page.getByRole('button',{name:'3D',exact:true}).click();
   await page.getByRole('button',{name:'Карта',exact:true}).click();await expect(page.locator('.geographic-map')).toBeVisible();

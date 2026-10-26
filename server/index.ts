@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { loadSnapshot, refreshSnapshot } from './data';
 import { answerQuestion } from './assistant';
 import { validateParameters } from '../shared/model';
+import { getLocalWeather, requestedPlace } from './weather';
+import { dailyAnswer } from './daily-assistant';
 
 const app=express();
 app.disable('x-powered-by');
@@ -15,7 +17,16 @@ const QuestionSchema=z.object({message:z.string().trim().min(1).max(3000),langua
 let lastRefresh=0;
 const visits=new Map<string,{count:number;start:number}>();
 
-app.get('/api/health',(_req,res)=>res.json({status:'ok',service:'obhush',interfaceVersion:2,assistantAvailable:Boolean(process.env.LLM_API_KEY)}));
+app.get('/api/health',(_req,res)=>res.json({status:'ok',service:'obhush',interfaceVersion:3,assistantAvailable:Boolean(process.env.LLM_API_KEY)}));
+app.get('/api/weather',async(req,res)=>{
+  const query=z.object({city:z.string().max(24).optional(),latitude:z.coerce.number().optional(),longitude:z.coerce.number().optional(),refresh:z.enum(['1','0']).optional()})
+    .refine(v=>Boolean(v.city)!==(v.latitude!==undefined&&v.longitude!==undefined)).safeParse(req.query);
+  if(!query.success){res.status(400).json({error:'Choose a city or a supported location.'});return;}
+  let place;try{place=requestedPlace(query.data);}catch{res.status(400).json({error:'Unknown or unsupported location.'});return;}
+  res.setHeader('Cache-Control','no-store');
+  try{res.json(await getLocalWeather(place,query.data.refresh==='1'));}
+  catch{res.status(503).json({error:'Weather is unavailable for the selected location. No other city has been substituted.'});}
+});
 app.get('/api/data',async(_req,res)=>{
   try{
     const snapshot=await loadSnapshot();
@@ -43,11 +54,25 @@ app.post('/api/assistant',async(req,res)=>{
   try{res.json(await answerQuestion(parsed.data.message,parsed.data.language,parsed.data.parameters,await loadSnapshot(),parsed.data.monitoring));}
   catch{res.status(502).json({error:'The assistant service is unavailable. Your data and scenario calculations are unaffected.'});}
 });
+app.post('/api/advice',async(req,res)=>{
+  const schema=z.object({message:z.string().trim().min(1).max(3000),language:z.enum(['ru','tj']),role:z.enum(['garden','work','family']),date:z.iso.date().optional(),
+    location:z.object({city:z.string().max(24).optional(),latitude:z.number().optional(),longitude:z.number().optional()}),
+    garden:z.object({area:z.number().min(1).max(100000),coefficient:z.number().min(.2).max(1.5),efficiency:z.number().min(.3).max(1),useRain:z.boolean()}),
+    family:z.object({people:z.number().int().min(1).max(12),showerMinutes:z.number().min(1).max(30),flow:z.number().min(1).max(25),loadsPerWeek:z.number().min(0).max(14),litresPerLoad:z.number().min(10).max(150)}),
+    duration:z.number().int().min(1).max(6)});
+  const parsed=schema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:'Invalid daily plan.'});return;}
+  let place;try{place=requestedPlace(parsed.data.location);}catch{res.status(400).json({error:'Unknown location.'});return;}
+  const ip=req.ip||'local',now=Date.now();let visit=visits.get(ip);
+  if(!visit||now-visit.start>60000){visit={count:0,start:now};visits.set(ip,visit);}
+  if(visit.count++>=12){res.status(429).json({error:'Please wait a minute before asking again.'});return;}
+  try{const weather=await getLocalWeather(place).catch(()=>null);res.json(await dailyAnswer(parsed.data,place,weather));}
+  catch{res.status(502).json({error:'The assistant is temporarily unavailable.'});}
+});
 app.use('/api',(_req,res)=>res.status(404).json({error:'Unknown API endpoint'}));
 
 if(process.env.NODE_ENV==='production'){
-  app.use(express.static(path.resolve('dist'),{maxAge:'1h'}));
-  app.get(/.*/,(_req,res)=>res.sendFile(path.resolve('dist/index.html')));
+  app.use(express.static(path.resolve('dist'),{maxAge:'1h',setHeaders(res,file){if(file.endsWith('.html'))res.setHeader('Cache-Control','no-cache');}}));
+  app.get(/.*/,(_req,res)=>{res.setHeader('Cache-Control','no-cache');res.sendFile(path.resolve('dist/index.html'));});
 }else{
   const {createServer}=await import('vite');
   const vite=await createServer({server:{middlewareMode:true,allowedHosts:true},appType:'spa'});

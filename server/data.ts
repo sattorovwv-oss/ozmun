@@ -23,6 +23,12 @@ const runtimeFile=path.join(root,'data/runtime/snapshot.json');
 const bundledFile=path.join(root,'data/snapshot.json');
 let memory:Snapshot|null=null;
 let refreshPromise:Promise<Snapshot>|null=null;
+let lastBackgroundAttempt=0;
+function refreshIfOld(snapshot:Snapshot){
+  if(Date.now()-Date.parse(snapshot.retrievedAt)>3600000&&Date.now()-lastBackgroundAttempt>15*60000){
+    lastBackgroundAttempt=Date.now();void refreshSnapshot().catch(()=>{/* Keep the retained basin dataset. */});
+  }
+}
 
 export function dushanbeToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dushanbe',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 function dateOffset(date:string,days:number){return new Date(new Date(date+'T00:00:00Z').getTime()+days*86400000).toISOString().slice(0,10);}
@@ -34,9 +40,9 @@ async function json(url:string){
 }
 
 export async function loadSnapshot():Promise<Snapshot>{
-  if(memory)return memory;
+  if(memory){refreshIfOld(memory);return memory;}
   for(const file of [runtimeFile,bundledFile]){
-    try{memory=SnapshotSchema.parse(JSON.parse(await readFile(file,'utf8')));return memory;}catch{/* Try the next valid retained snapshot. */}
+    try{memory=SnapshotSchema.parse(JSON.parse(await readFile(file,'utf8')));refreshIfOld(memory);return memory;}catch{/* Try the next valid retained snapshot. */}
   }
   return refreshSnapshot();
 }

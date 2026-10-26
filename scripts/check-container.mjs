@@ -7,7 +7,7 @@ for(let i=0;i<15;i++){
   try{
     const response=await fetch(base+'/api/health',{signal:AbortSignal.timeout(2500)});
     const body=await response.json();
-    if(response.ok&&body.status==='ok'){healthy=true;break;}
+    if(response.ok&&body.status==='ok'&&body.interfaceVersion===3){healthy=true;break;}
   }catch{/* Container may still be starting. */}
   await delay(1500);
 }
@@ -25,4 +25,19 @@ assert.match(result.answer,/212,1/);
 assert.match(result.answer,/ГВт/);
 const page=await fetch(base,{signal:AbortSignal.timeout(5000)}).then(r=>r.text());
 assert.match(page,/<div id="root">/);
-console.log('Container verified: healthy, real retained data, correct energy calculation, SPA served, no baked-in API key.');
+assert.match(page,/Вода\. Погода\. Жизнь/);
+const weatherResponse=await fetch(base+'/api/weather?city=dushanbe',{signal:AbortSignal.timeout(25000)});
+assert.equal(weatherResponse.status,200);
+const weather=await weatherResponse.json();
+assert.equal(weather.weather.place.id,'dushanbe');assert.equal(weather.weather.source,'Open-Meteo');
+assert.equal(weather.weather.days.length,7);assert.ok(Number.isFinite(Date.parse(weather.weather.current.at)));
+for(const variant of ['desktop','mobile']){
+  const video=await fetch(base+`/media/garden-${variant}.mp4`,{headers:{Range:'bytes=0-1023'},signal:AbortSignal.timeout(5000)});
+  assert.equal(video.status,206);assert.equal((await video.arrayBuffer()).byteLength,1024);
+}
+const advice=await fetch(base+'/api/advice',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(25000),body:JSON.stringify({
+  message:'Как сократить расход воды?',language:'ru',role:'family',location:{city:'dushanbe'},
+  garden:{area:50,coefficient:.85,efficiency:.9,useRain:true},family:{people:4,showerMinutes:8,flow:9,loadsPerWeek:3,litresPerLoad:45},duration:2,
+})});
+assert.equal(advice.status,200);const explanation=await advice.json();assert.equal(explanation.mode,'local');assert.match(explanation.answer,/3.?240/);
+console.log('Container verified: version 3, retained river data, current/daily weather separation, both video ranges, daily planning, correct energy and family calculations, no baked-in API key.');

@@ -18,6 +18,7 @@ COPY scripts ./scripts
 COPY tests ./tests
 COPY public ./public
 COPY data/snapshot.json ./data/snapshot.json
+COPY data/weather-dushanbe.json ./data/weather-dushanbe.json
 RUN npm run build && npm test && npm prune --omit=dev --no-audit --no-fund
 
 FROM node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runtime
@@ -29,6 +30,7 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/server ./server
 COPY --from=build --chown=node:node /app/shared ./shared
 COPY --from=build --chown=node:node /app/data/snapshot.json ./data/snapshot.json
+COPY --from=build --chown=node:node /app/data/weather-dushanbe.json ./data/weather-dushanbe.json
 RUN mkdir -p /app/data/runtime && chown node:node /app/data/runtime
 USER node
 EXPOSE 3000
