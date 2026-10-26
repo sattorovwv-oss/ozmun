@@ -30,7 +30,7 @@ export function localDate(at:string|number):string {
 }
 export function weatherIsStale(weather:LocalWeather,now=Date.now()){
   const currentAge=now-Date.parse(weather.current.at),fetchAge=now-Date.parse(weather.fetchedAt);
-  return !Number.isFinite(currentAge)||currentAge>45*60000||currentAge< -20*60000||fetchAge>30*60000;
+  return !Number.isFinite(currentAge)||currentAge>45*60000||currentAge< -20*60000||fetchAge>30*60000||weather.days[0]?.date!==localDate(now);
 }
 export type WeatherKind='clear'|'partly'|'cloudy'|'fog'|'rain'|'snow'|'storm'|'unknown';
 export function weatherKind(code:number|null):WeatherKind {

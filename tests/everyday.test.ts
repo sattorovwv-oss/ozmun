@@ -21,6 +21,7 @@ test('weather dates use Dushanbe time, and old model conditions are explicitly s
   const copy=structuredClone(weather);copy.current.at='2026-10-27T03:00:00Z';copy.fetchedAt='2026-10-27T03:05:00Z';
   assert.equal(weatherIsStale(copy,Date.parse('2026-10-27T03:15:00Z')),false);
   assert.equal(weatherIsStale(copy,Date.parse('2026-10-27T05:00:00Z')),true);
+  copy.days[0].date='2026-10-26';assert.equal(weatherIsStale(copy,Date.parse('2026-10-27T03:15:00Z')),true);
   assert.equal(weatherKind(null),'unknown');
 });
 test('wrong units, incomplete forecasts and ambiguous locations are rejected',()=>{

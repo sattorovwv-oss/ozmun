@@ -16,6 +16,7 @@ export function EverydayWeather({language,location,payload,loading,error,onLocat
   onGeo:()=>void;locating:boolean;geoError:string|null;onRefresh:()=>void;date:string;onDate:(value:string)=>void;
 }){
   const c=consumerStrings(language),weather=payload?.weather;
+  const today=localDate(Date.now()),tomorrow=localDate(Date.now()+86400000);
   return <section className="everyday-weather content-width" id="weather">
     <div className="consumer-section-heading"><div><span className="consumer-eyebrow">{c.weatherEyebrow}</span><h2>{c.weatherTitle}</h2><p>{c.weatherIntro}</p></div>
       <div className="consumer-location"><label><MapPin size={17}/><span className="sr-only">{c.city}</span><select aria-label={c.city} value={'city'in location?location.city:'geo'} onChange={e=>onLocation({city:e.target.value})}>
@@ -35,7 +36,7 @@ export function EverydayWeather({language,location,payload,loading,error,onLocat
         </div>
         <div className="consumer-forecast"><div className="consumer-forecast-heading"><h3>{c.week}</h3><span>{c.updated}: {weatherTime(weather.fetchedAt,language)}</span></div><div className="consumer-week" aria-label={c.week}>
           {weather.days.map((day,i)=><button key={day.date} className={day.date===date?'selected':''} aria-pressed={day.date===date} aria-label={shortDate(day.date,language)} onClick={()=>onDate(day.date)}>
-            <span>{i===0?c.today:i===1?c.tomorrow:new Date(day.date+'T12:00:00Z').toLocaleDateString(language==='ru'?'ru-RU':'tg-TJ',{weekday:'short'})}</span><b>{shortDate(day.date,language)}</b><ConditionIcon code={day.code} size={27}/><strong>{day.max===null?'—':num(day.max)}°<small>{day.min===null?'—':num(day.min)}°</small></strong><em><Droplets size={11}/>{day.rain===null?'—':num(day.rain,1)} {c.mm}</em><span className="forecast-probability" title={c.rainProbability}>{day.rainProbability===null?'—':num(day.rainProbability)}%</span>
+            <span>{day.date===today?c.today:day.date===tomorrow?c.tomorrow:new Date(day.date+'T12:00:00Z').toLocaleDateString(language==='ru'?'ru-RU':'tg-TJ',{weekday:'short',timeZone:'Asia/Dushanbe'})}</span><b>{shortDate(day.date,language)}</b><ConditionIcon code={day.code} size={27}/><strong>{day.max===null?'—':num(day.max)}°<small>{day.min===null?'—':num(day.min)}°</small></strong><em><Droplets size={11}/>{day.rain===null?'—':num(day.rain,1)} {c.mm}</em><span className="forecast-probability" title={c.rainProbability}>{day.rainProbability===null?'—':num(day.rainProbability)}%</span>
           </button>)}
         </div><p className="forecast-day-note"><Info size={14}/>{c.wholeDay}</p><details className="weather-source-note"><summary>{c.currentNote}</summary><p>{c.modelAt}: {weather.current.at} · UTC+5<br/>{language==='ru'?'Координаты точки / ячейки модели':'Нуқта / ячейкаи модел'}: {weather.place.latitude.toFixed(4)}, {weather.place.longitude.toFixed(4)} / {weather.grid.latitude.toFixed(4)}, {weather.grid.longitude.toFixed(4)}<br/><a href="https://open-meteo.com/en/docs" target="_blank" rel="noreferrer">Open-Meteo</a></p></details></div>
       </div>
