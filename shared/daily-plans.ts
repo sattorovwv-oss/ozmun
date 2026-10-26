@@ -20,7 +20,7 @@ export function outdoorWindows(weather:LocalWeather,date:string,duration=2,now=D
   const start=Date.parse(day.sunrise),end=Date.parse(day.sunset);
   const suitable=(h:WeatherHour)=>Date.parse(h.at)>=Math.max(start,now)&&Date.parse(h.at)+3600000<=end&&
     h.temperature!==null&&h.temperature>=5&&h.temperature<=32&&h.rain!==null&&h.rain<.2&&
-    h.rainProbability!==null&&h.rainProbability<=35&&h.wind!==null&&h.wind<=8;
+    h.rainProbability!==null&&h.rainProbability<=35&&h.wind!==null&&h.wind<=8&&h.code!==null&&h.code>=0&&h.code<=3;
   const windows:WorkWindow[]=[];
   for(let index=0;index<weather.hours.length;index++){
     const group=weather.hours.slice(index,index+duration);

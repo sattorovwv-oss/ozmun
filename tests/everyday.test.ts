@@ -47,6 +47,8 @@ test('work windows cannot contain darkness, rain, missing conditions or elapsed 
   assert.ok(windows.length>0);assert.ok(windows.every(w=>Date.parse(w.start)>=Date.parse(date+'T02:30:00Z')));
   copy.hours.forEach(h=>h.rainProbability=null);assert.equal(outdoorWindows(copy,date,2,0).length,0);
   copy.hours.forEach(h=>{h.rainProbability=10;h.rain=1;});assert.equal(outdoorWindows(copy,date,2,0).length,0);
+  copy.hours.forEach(h=>{h.rain=0;h.code=95;});assert.equal(outdoorWindows(copy,date,2,0).length,0);
+  copy.hours.forEach(h=>{h.code=null;});assert.equal(outdoorWindows(copy,date,2,0).length,0);
 });
 test('household savings compare only stated uses and never invent negative savings',()=>{
   const inputs={people:4,showerMinutes:8,flow:9,loadsPerWeek:3,litresPerLoad:45};
