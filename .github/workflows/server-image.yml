@@ -1,0 +1,67 @@
+name: Build VPS image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/obhush-deployment]
+    paths:
+      - .github/workflows/server-image.yml
+      - Dockerfile
+      - .dockerignore
+      - package.json
+      - package-lock.json
+      - src/**
+      - shared/**
+      - server/**
+      - public/**
+      - data/snapshot.json
+      - deploy/compose.yml
+      - scripts/check-container.mjs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: obhush-server-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image outside production
+        run: docker build -t obhush:2026-10-26 .
+      - name: Test restricted container
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f obhush-ci >/dev/null 2>&1 || true' EXIT
+          docker run -d --name obhush-ci \
+            --cpus=.5 --memory=512m --memory-swap=512m --pids-limit=96 \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges:true \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m,mode=1777 \
+            -v obhush-ci-runtime:/app/data/runtime \
+            -p 127.0.0.1:43100:3000 obhush:2026-10-26
+          node scripts/check-container.mjs
+      - name: Package image and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release
+          docker save obhush:2026-10-26 | gzip -1 > release/obhush-linux-amd64.image.tar.gz
+          cp deploy/compose.yml deploy/runtime.env.example release/
+          cd release
+          sha256sum obhush-linux-amd64.image.tar.gz > obhush-linux-amd64.image.tar.gz.sha256
+      - name: Publish downloadable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="obhush-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+          gh release create "$tag" release/* --target "$GITHUB_SHA" \
+            --title "OBHUSH VPS image · ${GITHUB_SHA:0:7}" \
+            --notes "Prebuilt Linux/amd64 image. Build and tests run away from the production VPS. No API keys or runtime.env are included. Verify SHA256 before loading. Review resource limits and current production workload before starting." \
+            --latest
