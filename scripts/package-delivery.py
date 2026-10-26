@@ -23,6 +23,8 @@ for current, dirs, names in os.walk(root):
         relative = path.relative_to(root).as_posix()
         if relative in excluded_paths:
             continue
+        if relative.startswith('artifacts/') and (path.parent != root / 'artifacts' or path.suffix.lower() not in {'.png', '.jpg', '.webp', '.html', '.pdf'}):
+            continue
         if (name == '.env' or name.startswith('.env.') or name.endswith('.env')) and name != '.env.example':
             continue
         if name.endswith(('.log', '.tar', '.tar.gz', '.tar.gz.sha256', '.zip', '.pem', '.key')):

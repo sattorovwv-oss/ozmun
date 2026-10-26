@@ -12,12 +12,13 @@ on:
     paths:
       - .github/workflows/public-site.yml
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   public-https:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 10
     steps:
       - name: Verify TLS, API, interface assets and terrain from an external network
         env:
@@ -32,27 +33,27 @@ jobs:
           const base = new URL(process.env.PUBLIC_SITE_URL);
           assert.equal(base.protocol, 'https:');
           assert.equal(base.username + base.password, '');
-          async function get(path) {
+          async function get(path, timeout=12000) {
             const response = await fetch(new URL(path, base), {
-              signal: AbortSignal.timeout(12000), redirect: 'error',
+              signal: AbortSignal.timeout(timeout), redirect: 'error',
             });
             assert.equal(response.status, 200, `GET ${path}`);
             return response;
           }
           let health;
           let lastError;
-          for (let attempt = 0; attempt < 12; attempt++) {
+          for (let attempt = 0; attempt < 18; attempt++) {
             try {
               health = await (await get('/api/health')).json();
               assert.equal(health.status, 'ok');
               assert.equal(health.service, 'obhush');
-              assert.ok(health.interfaceVersion >= 2, 'Waiting for the water-safety interface update');
+              assert.ok(health.interfaceVersion >= 3, 'Waiting for the everyday service update');
               break;
             } catch (error) {
               health = undefined;
               lastError = error;
-              console.log(`Waiting for public HTTPS: attempt ${attempt + 1}/12`);
-              if (attempt < 11) await delay(10000);
+              console.log(`Waiting for public HTTPS: attempt ${attempt + 1}/18`);
+              if (attempt < 17) await delay(10000);
             }
           }
           if (!health) throw lastError;
@@ -66,7 +67,7 @@ jobs:
           const html = await (await get('/')).text();
           assert.match(html, /<div id="root">/);
           assert.match(html, /ОБҲУШ/);
-          assert.match(html, /Вода и безопасность/);
+          assert.match(html, /Вода\. Погода\. Жизнь/);
           const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(match => match[1]);
           assert.ok(assets.some(path => path.endsWith('.js')));
           assert.ok(assets.some(path => path.endsWith('.css')));
@@ -84,15 +85,28 @@ jobs:
           const relief = await get('/relief.webp');
           assert.match(relief.headers.get('content-type') || '', /image\/webp/);
           assert.ok((await relief.arrayBuffer()).byteLength > 1000);
+          for (const city of ['dushanbe','khujand']) {
+            const payload = await (await get('/api/weather?city='+city,25000)).json();
+            assert.equal(payload.weather.place.id,city);
+            assert.equal(payload.stale,false,'Fresh weather must be available for '+city);
+            assert.ok(Number.isFinite(payload.weather.current.temperature));
+            assert.equal(payload.weather.days.length,7);
+            assert.ok(Date.now()-Date.parse(payload.weather.current.at)<45*60000);
+          }
+          for (const variant of ['desktop','mobile']) {
+            const video = await fetch(new URL('/media/garden-'+variant+'.mp4',base),{headers:{Range:'bytes=0-1023'},signal:AbortSignal.timeout(12000)});
+            assert.equal(video.status,206);assert.equal((await video.arrayBuffer()).byteLength,1024);
+          }
+          assert.ok((await (await get('/fonts/Lora.ttf')).arrayBuffer()).byteLength>1000);
 
           const summary = `Public HTTPS verified: ${base.origin}\n` +
             `Certificate validation enabled; health and data APIs work; ${assets.length} interface assets, terrain and font load.\n` +
             `Weather points: ${data.snapshot.weather.length}; river days: ${series.time.length}; data retrieved: ${data.snapshot.retrievedAt}.\n` +
-            `External assistant key configured: ${Boolean(health.assistantAvailable)}. No assistant requests or data refreshes were made.\n`;
+            `Current city weather and both video byte ranges verified. External assistant key configured: ${Boolean(health.assistantAvailable)}. No basin refresh request was made.\n`;
           console.log(summary);
           if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);
           JS
-      - name: Ask one water-safety question through the public assistant
+      - name: Ask one everyday planning question through the public assistant
         id: assistant
         env:
           PUBLIC_SITE_URL: ${{ inputs.site || 'https://obihush.site' }}
@@ -103,16 +117,13 @@ jobs:
           import { appendFile } from 'node:fs/promises';
           const base = new URL(process.env.PUBLIC_SITE_URL);
           const health = await fetch(new URL('/api/health', base), { signal: AbortSignal.timeout(12000) }).then(r => r.json());
-          const data = await fetch(new URL('/api/data', base), { signal: AbortSignal.timeout(12000) }).then(r => r.json());
-          const response = await fetch(new URL('/api/assistant', base), {
+          const response = await fetch(new URL('/api/advice', base), {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(35000),
+            signal: AbortSignal.timeout(45000),
             body: JSON.stringify({
-              message: 'Что означают осадки в Раште? Может ли эта система точно предсказать сель?', language: 'ru',
-              monitoring: { pointId:'rasht', date:data.snapshot.today, addedRain:0 },
-              parameters: { capacity:4500, initialStorage:2790, release:650, inflowChange:0,
-                irrigationDemand:350, head:220, efficiency:.9, turbineLimit:1400,
-                area:80, evaporation:2.5, reservePercent:30 },
+              message: 'Объясни кратко, как этот расчёт помогает семье беречь воду, без промежуточной арифметики.', language:'ru',role:'family',location:{city:'dushanbe'},
+              garden:{area:50,coefficient:.85,efficiency:.9,useRain:true},
+              family:{people:4,showerMinutes:8,flow:9,loadsPerWeek:3,litresPerLoad:45},duration:2,
             }),
           });
           assert.equal(response.status, 200);
@@ -121,10 +132,33 @@ jobs:
           assert.equal(typeof result.answer, 'string');
           assert.ok(result.answer.length >= 24);
           assert.ok((result.answer.match(/[А-Яа-яЁё]/g) || []).length >= 5);
-          assert.doesNotMatch(result.answer, /\d+(?:[.,]\d+)?\s*%/);
           await appendFile(process.env.GITHUB_OUTPUT, `mode=${result.mode}\nconfigured=${Boolean(health.assistantAvailable)}\n`);
           await appendFile(process.env.GITHUB_STEP_SUMMARY,
-            `\nPublic assistant returned a localized water-safety answer without an invented risk percentage. Mode: ${result.mode}; external key configured: ${Boolean(health.assistantAvailable)}.\n`);
+            `\nPublic everyday assistant returned a localized planning answer. Mode: ${result.mode}; external key configured: ${Boolean(health.assistantAvailable)}.\n`);
           JS
       - name: Assistant verified (mode=${{ steps.assistant.outputs.mode }}, key configured=${{ steps.assistant.outputs.configured }})
         run: echo 'Public assistant verification completed.'
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Verify the real public desktop and mobile interface
+        env:
+          PUBLIC_SITE_URL: ${{ inputs.site || 'https://obihush.site' }}
+        shell: bash
+        run: |
+          if command -v google-chrome >/dev/null; then
+            CHROMIUM_PATH="$(command -v google-chrome)" node scripts/check-public-everyday.mjs
+          else
+            npx playwright install --with-deps chromium
+            node scripts/check-public-everyday.mjs
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-everyday-interface
+          path: artifacts/public-*.png
+          if-no-files-found: ignore
+          retention-days: 7
