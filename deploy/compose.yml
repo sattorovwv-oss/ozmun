@@ -1,0 +1,39 @@
+# No build section: never compile on the client's production server.
+name: obhush
+services:
+  app:
+    image: ${OBHUSH_IMAGE:-obhush:2026-10-26}
+    pull_policy: never
+    init: true
+    restart: "on-failure:3"
+    ports:
+      - "127.0.0.1:${OBHUSH_PORT:-43100}:3000"
+    env_file:
+      - ./runtime.env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      NODE_OPTIONS: --max-old-space-size=192
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: 0.50
+    cpu_shares: 128
+    oom_score_adj: 500
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 96
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    volumes:
+      - runtime:/app/data/runtime
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+volumes:
+  runtime:

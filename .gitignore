@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/runtime/
+playwright-report/
+test-results/
+*.log
+artifacts/
+deploy/known_hosts
+deploy/runtime.env
+deploy/.env
+*.image.tar
