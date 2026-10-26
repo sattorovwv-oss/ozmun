@@ -84,7 +84,9 @@ export async function getLocalWeather(place:LocalPlace,force=false):Promise<Weat
       if(!response.ok)throw new Error('Weather provider unavailable');
       const raw:unknown=await response.json(),fetchedAt=new Date().toISOString();
       const weather=parseWeather(raw,place,fetchedAt);retain(weather);
-      try{await mkdir(directory,{recursive:true});await writeFile(fileFor(place)+'.tmp',JSON.stringify({place,raw,fetchedAt}));await rename(fileFor(place)+'.tmp',fileFor(place));}catch{/* Valid current data remains available in memory. */}
+      // Persist only the fixed city catalog; precise locations stay in the bounded
+      // memory cache and the visitor's browser, keeping VPS storage bounded.
+      if(CITIES.some(city=>city.id===place.id))try{await mkdir(directory,{recursive:true});await writeFile(fileFor(place)+'.tmp',JSON.stringify({place,raw,fetchedAt}));await rename(fileFor(place)+'.tmp',fileFor(place));}catch{/* Valid current data remains available in memory. */}
       return payload(weather,'live');
     }catch{if(retained)return payload(retained,'saved',true);throw new Error('Weather unavailable for the selected location');}
   })();
