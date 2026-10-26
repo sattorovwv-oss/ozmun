@@ -87,3 +87,36 @@ jobs:
           console.log(summary);
           if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);
           JS
+      - name: Ask one calculation question through the public assistant
+        id: assistant
+        env:
+          PUBLIC_SITE_URL: ${{ inputs.site || 'https://obihush.site' }}
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { appendFile } from 'node:fs/promises';
+          const base = new URL(process.env.PUBLIC_SITE_URL);
+          const health = await fetch(new URL('/api/health', base), { signal: AbortSignal.timeout(12000) }).then(r => r.json());
+          const response = await fetch(new URL('/api/assistant', base), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(35000),
+            body: JSON.stringify({
+              message: 'Сколько энергии получится за неделю?', language: 'ru',
+              parameters: { capacity:4500, initialStorage:2790, release:650, inflowChange:0,
+                irrigationDemand:350, head:220, efficiency:.9, turbineLimit:1400,
+                area:80, evaporation:2.5, reservePercent:30 },
+            }),
+          });
+          assert.equal(response.status, 200);
+          const result = await response.json();
+          assert.ok(['llm', 'local'].includes(result.mode));
+          assert.equal(typeof result.answer, 'string');
+          assert.match(result.answer.replace(/\s/g, ''), /212(?:[.,]\d{1,2})?/);
+          assert.match(result.answer, /ГВт/);
+          await appendFile(process.env.GITHUB_OUTPUT, `mode=${result.mode}\nconfigured=${Boolean(health.assistantAvailable)}\n`);
+          await appendFile(process.env.GITHUB_STEP_SUMMARY,
+            `\nPublic assistant returned a valid scenario total. Mode: ${result.mode}; external key configured: ${Boolean(health.assistantAvailable)}.\n`);
+          JS
+      - name: Assistant verified (mode=${{ steps.assistant.outputs.mode }}, key configured=${{ steps.assistant.outputs.configured }})
+        run: echo 'Public assistant verification completed.'
