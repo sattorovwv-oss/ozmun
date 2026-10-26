@@ -20,6 +20,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Read public deployment version
+        id: observed
+        env:
+          PUBLIC_SITE_URL: ${{ inputs.site || 'https://obihush.site' }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFile } from 'node:fs/promises';
+          let version='unreachable';
+          try {
+            const response=await fetch(new URL('/api/health',process.env.PUBLIC_SITE_URL),{signal:AbortSignal.timeout(12000)});
+            const body=await response.json();
+            if(Number.isInteger(body.interfaceVersion))version=String(body.interfaceVersion);
+          } catch {}
+          await appendFile(process.env.GITHUB_OUTPUT,`version=${version}\n`);
+          JS
+      - name: Observed public interface (${{ steps.observed.outputs.version }})
+        run: echo 'The version was read from the public health endpoint.'
       - name: Verify TLS, API, interface assets and terrain from an external network
         env:
           PUBLIC_SITE_URL: ${{ inputs.site || 'https://obihush.site' }}
@@ -29,6 +46,7 @@ jobs:
           import assert from 'node:assert/strict';
           import { setTimeout as delay } from 'node:timers/promises';
           import { appendFile } from 'node:fs/promises';
+          process.on('uncaughtException',error=>{console.error('::error::'+String(error.message).replace(/[\r\n]/g,' ').slice(0,500));process.exit(1);});
 
           const base = new URL(process.env.PUBLIC_SITE_URL);
           assert.equal(base.protocol, 'https:');
