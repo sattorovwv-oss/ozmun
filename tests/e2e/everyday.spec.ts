@@ -32,6 +32,7 @@ test('video introduction explains the three audiences and uses current weather i
   await page.waitForFunction(()=>{const video=document.querySelector('video');return video&&video.readyState>=2&&!video.paused;});
   await page.locator('video').evaluate((video:HTMLVideoElement)=>{video.currentTime=video.duration-.2;});
   await expect(page.locator('.consumer-hero-content')).toBeVisible();
+  await expect(page.locator('.consumer-hero-content')).toHaveCSS('opacity','1');
   expect(await page.locator('video').evaluate((video:HTMLVideoElement)=>video.ended&&video.paused)).toBe(true);
   await expect(page.getByRole('button',{name:'Посмотреть ещё раз',exact:true})).toBeVisible();
   await expect(page.locator('.audience-card')).toHaveCount(3);
