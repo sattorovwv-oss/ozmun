@@ -15,7 +15,7 @@ try{
   await page.goto(base,{waitUntil:'domcontentloaded'});
   await page.locator('.consumer-hero h1').waitFor();
   assert.match(await page.locator('.consumer-hero h1').textContent(),/Вода\. Погода\./);
-  assert.equal(await page.locator('video').getAttribute('src'),'/media/garden-desktop.mp4');
+  assert.equal(await page.locator('video').getAttribute('src'),'/media/garden-desktop.mp4?v=orchard-20261027');
   await page.getByTestId('current-temperature').waitFor({timeout:30000});
   assert.equal(await page.locator('.current-city').textContent(),'Душанбе');
   await page.evaluate(()=>document.fonts.ready);
@@ -29,7 +29,7 @@ try{
   mobile.on('pageerror',error=>errors.push(error.message));
   await mobile.goto(base,{waitUntil:'domcontentloaded'});await mobile.locator('.consumer-hero h1').waitFor();
   await mobile.getByTestId('current-temperature').waitFor({timeout:30000});await mobile.evaluate(()=>document.fonts.ready);
-  assert.equal(await mobile.locator('video').getAttribute('src'),'/media/garden-mobile.mp4');
+  assert.equal(await mobile.locator('video').getAttribute('src'),'/media/garden-mobile.mp4?v=orchard-20261027');
   const bounds=await mobile.locator('.hero-current').boundingBox();
   assert.ok(bounds&&bounds.x>=0&&bounds.x+bounds.width<=390&&bounds.y+bounds.height<=844);
   assert.ok(await mobile.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));

@@ -26,7 +26,7 @@ test.beforeEach(async({page})=>{
 test('video introduction explains the three audiences and uses current weather independently of daily rain',async({page})=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('/');await expect(page.locator('.consumer-hero h1')).toContainText('Вода. Погода.');
-  await expect(page.locator('video')).toHaveAttribute('src','/media/garden-desktop.mp4');
+  await expect(page.locator('video')).toHaveAttribute('src','/media/garden-desktop.mp4?v=orchard-20261027');
   await expect(page.locator('.audience-card')).toHaveCount(3);
   await expect(page.getByTestId('current-condition')).toHaveText('Ясно');
   await expect(page.getByTestId('current-temperature')).toHaveText('18°');
@@ -88,7 +88,7 @@ test('a mismatched weather response is refused instead of relabelled with the se
 
 test('mobile uses the portrait video, keeps the hero controls on screen and supports Tajik',async({page})=>{
   await page.setViewportSize({width:390,height:844});await page.goto('/');
-  await expect(page.locator('video')).toHaveAttribute('src','/media/garden-mobile.mp4');
+  await expect(page.locator('video')).toHaveAttribute('src','/media/garden-mobile.mp4?v=orchard-20261027');
   await expect(page.locator('.hero-current')).toContainText('Душанбе');
   const bounds=(await page.locator('.hero-current').boundingBox())!;
   expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(390);
