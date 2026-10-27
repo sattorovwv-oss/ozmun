@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, Droplets, Leaf, MapPin, Menu, Mountain, Pause, Play, Sparkles, Sprout, Trash2, Users, Waves, Wind, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, Droplets, Leaf, MapPin, Menu, Mountain, Pause, Play, RotateCcw, Sparkles, Sprout, Trash2, Users, Waves, Wind, X } from 'lucide-react';
 import type { Language, Page } from '../../shared/types';
 import { CITIES, localDate } from '../../shared/local-weather';
 import type { EverydayRole, LocationChoice } from '../../shared/local-weather';
@@ -21,6 +21,8 @@ function initialLocation():LocationChoice{
   return {city:'dushanbe'};
 }
 const ROLES=['garden','work','family'] as const;
+const INTRO_SEEN_KEY='obhush-intro-orchard-20261027';
+function introSeen(){try{return sessionStorage.getItem(INTRO_SEEN_KEY)==='1';}catch{return false;}}
 export default function Home({language,setLanguage,onExplore}:{language:Language;setLanguage:(value:Language)=>void;onExplore:(page?:Page)=>void}){
   const c=consumerStrings(language),ru=language==='ru';
   const [location,setLocation]=useState<LocationChoice>(initialLocation),[role,setRole]=useState<EverydayRole>(()=>{const r=saved<string>('obhush-everyday-role','garden');return ROLES.includes(r as EverydayRole)?r as EverydayRole:'garden';});
@@ -29,8 +31,11 @@ export default function Home({language,setLanguage,onExplore}:{language:Language
   const [family,setFamily]=useState<FamilyInputs>({people:4,showerMinutes:8,flow:9,loadsPerWeek:3,litresPerLoad:45}),[duration,setDuration]=useState(2);
   const [tasks,setTasks]=useState<SavedTask[]>(()=>{const values=saved<SavedTask[]>('obhush-everyday-tasks',[]);return Array.isArray(values)?values.filter(t=>t&&typeof t==='object'&&typeof t.id==='string'&&typeof t.label==='string'&&typeof t.done==='boolean').slice(0,30):[];});
   const [assistant,setAssistant]=useState(false),[menu,setMenu]=useState(false),[locating,setLocating]=useState(false),[geoError,setGeoError]=useState<string|null>(null),[toast,setToast]=useState<string|null>(null),[now,setNow]=useState(Date.now());
-  const [mobile,setMobile]=useState(()=>matchMedia('(max-width: 700px)').matches),[playing,setPlaying]=useState(()=>!matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [mobile,setMobile]=useState(()=>matchMedia('(max-width: 700px)').matches),[playing,setPlaying]=useState(false);
+  const [reducedMotion]=useState(()=>matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [introFinished,setIntroFinished]=useState(()=>matchMedia('(prefers-reduced-motion: reduce)').matches||introSeen());
   const video=useRef<HTMLVideoElement>(null);
+  useEffect(()=>{try{sessionStorage.setItem(INTRO_SEEN_KEY,'1');}catch{/* Do not repeat the introduction when returning to this page. */}},[]);
   useEffect(()=>{const media=matchMedia('(max-width: 700px)'),change=()=>setMobile(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),60000);return()=>clearInterval(timer);},[]);
   useEffect(()=>{localStorage.setItem('obhush-everyday-location',JSON.stringify(location));setDate('');},[location]);
@@ -54,16 +59,29 @@ export default function Home({language,setLanguage,onExplore}:{language:Language
   const placeName=weather?(ru?weather.place.name:weather.place.nameTj):city?(ru?city.name:city.nameTj):c.location;
   const saveTask=(label:string)=>{setTasks(values=>[{id:crypto.randomUUID(),label,role,place:placeName,done:false,createdAt:new Date().toISOString()},...values].slice(0,30));setToast(c.saved);};
   const clip=mobile?'mobile':'desktop';
+  function finishIntro(){setIntroFinished(true);setPlaying(false);try{sessionStorage.setItem(INTRO_SEEN_KEY,'1');}catch{/* Session memory is optional. */}}
+  function skipIntro(){const film=video.current;if(film){film.pause();if(Number.isFinite(film.duration))film.currentTime=Math.max(0,film.duration-.05);}finishIntro();}
+  function toggleVideo(){
+    const film=video.current;if(!film)return;
+    if(introFinished){setIntroFinished(false);film.currentTime=0;void film.play().catch(finishIntro);}
+    else if(film.paused)void film.play().catch(finishIntro);else film.pause();
+  }
+  function holdFinalFrame(){const film=video.current;if(!film||!introFinished)return;film.pause();if(!reducedMotion&&Number.isFinite(film.duration)&&film.currentTime<film.duration-.1)film.currentTime=Math.max(0,film.duration-.05);}
+  useEffect(()=>{
+    if(introFinished){holdFinalFrame();return;}
+    if(reducedMotion)return;
+    const film=video.current;if(film)void film.play().catch(finishIntro);
+  },[clip,introFinished,reducedMotion]);
   return <div className="consumer-site"><a href="#for-you" className="skip-link">{ru?'К содержимому':'Ба муҳтаво'}</a>
-    <section className="consumer-hero" aria-label={c.tagline}>
-      <div className="hero-film"><video key={clip} ref={video} src={`/media/garden-${clip}.mp4?v=orchard-20261027`} poster={`/media/garden-${clip}.jpg?v=orchard-20261027`} autoPlay={!matchMedia('(prefers-reduced-motion: reduce)').matches} muted loop playsInline preload="metadata" onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} aria-label={c.videoCaption}/><div className="hero-film-shade"/></div>
+    <section className={`consumer-hero ${introFinished?'intro-finished':'intro-playing'}`} aria-label={c.tagline}>
+      <div className="hero-film"><video key={clip} ref={video} src={`/media/garden-${clip}.mp4?v=orchard-20261027`} poster={`/media/garden-${clip}.jpg?v=orchard-20261027`} autoPlay={!introFinished&&!reducedMotion} muted playsInline preload="metadata" onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onEnded={finishIntro} onError={finishIntro} onLoadedMetadata={holdFinalFrame} onLoadedData={holdFinalFrame} aria-label={c.videoCaption}/><div className="hero-film-shade"/></div>
       <header className="consumer-header"><a className="consumer-brand" href="#" onClick={e=>{e.preventDefault();window.scrollTo({top:0,behavior:'smooth'});}}><span><Waves size={27}/></span><div>ОБҲУШ<small>{c.tagline}</small></div></a>
         <nav aria-label={ru?'Главное меню':'Менюи асосӣ'} className={menu?'open':''}><button onClick={()=>scroll('for-you')}>{c.navPeople}</button><button onClick={()=>scroll('weather')}>{c.navWeather}</button><button onClick={()=>onExplore('overview')}>{c.navWater}<ArrowUpRight size={13}/></button><button onClick={()=>scroll('how-it-works')}>{c.navHow}</button></nav>
         <div className="consumer-header-actions"><div className="consumer-language"><button aria-pressed={ru} className={ru?'active':''} onClick={()=>setLanguage('ru')}>RU</button><span>/</span><button aria-pressed={!ru} className={!ru?'active':''} onClick={()=>setLanguage('tj')}>TJ</button></div><button className="header-plan-button" onClick={()=>scroll('planner')}>{c.myPlan}<ArrowUpRight size={14}/></button><button className="consumer-menu-button" onClick={()=>setMenu(v=>!v)} aria-label={menu?c.close:(ru?'Открыть меню':'Кушодани меню')}>{menu?<X size={24}/>:<Menu size={24}/>}</button></div>
       </header>
-      <div className="consumer-hero-content content-width"><div className="hero-country"><span/> {c.eyebrow}</div><h1>{c.heroLine1}<br/><em>{c.heroLine2}</em></h1><p>{c.heroText}</p><div className="hero-buttons"><button className="consumer-button lime" onClick={()=>scroll('for-you')}>{c.heroAction}<ArrowUpRight size={19}/></button><button className="hero-secondary" onClick={()=>scroll('how-it-works')}><span><Play size={13} fill="currentColor"/></span>{c.heroSecondary}</button></div><div className="hero-audiences">{ROLES.map(value=><button key={value} onClick={()=>pickRole(value,true)}>{value==='garden'?<Sprout size={14}/>:value==='work'?<Wind size={14}/>:<Users size={14}/>} {c[(value+'Short') as 'gardenShort'|'workShort'|'familyShort']}</button>)}</div></div>
-      <div className="hero-bottom content-width"><span className="hero-video-caption">{c.videoCaption}</span><button className="hero-current" onClick={()=>scroll('weather')}><MapPin size={16}/><span><b>{placeName}</b><small>{weather?`${payload?.stale?c.savedWeather:c.now} · ${weatherTime(weather.current.at,language)}`:c.navWeather}</small></span>{weather&&<><strong>{weather.current.temperature===null?'—':num(weather.current.temperature,1)}°</strong><ConditionIcon code={weather.current.code} isDay={weather.current.isDay} size={26}/></>}<ArrowUpRight size={16}/></button><button className="hero-film-toggle" aria-label={playing?c.pause:c.play} title={playing?c.pause:c.play} onClick={()=>{if(!video.current)return;if(video.current.paused)void video.current.play().catch(()=>setPlaying(false));else video.current.pause();}}>{playing?<Pause size={17}/>:<Play size={17}/>}</button></div>
-      <div className="hero-scroll"><span>{c.scroll}</span><ArrowDown size={13}/></div>
+      <div className="consumer-hero-content content-width" inert={!introFinished} aria-hidden={!introFinished}><div className="hero-country"><span/> {c.eyebrow}</div><h1>{c.heroLine1}<br/><em>{c.heroLine2}</em></h1><p>{c.heroText}</p><div className="hero-buttons"><button className="consumer-button lime" onClick={()=>scroll('for-you')}>{c.heroAction}<ArrowUpRight size={19}/></button><button className="hero-secondary" onClick={()=>scroll('how-it-works')}><span><Play size={13} fill="currentColor"/></span>{c.heroSecondary}</button></div><div className="hero-audiences">{ROLES.map(value=><button key={value} onClick={()=>pickRole(value,true)}>{value==='garden'?<Sprout size={14}/>:value==='work'?<Wind size={14}/>:<Users size={14}/>} {c[(value+'Short') as 'gardenShort'|'workShort'|'familyShort']}</button>)}</div></div>
+      <div className="hero-bottom content-width"><span className="hero-video-caption">{c.videoCaption}</span><button className="hero-current" inert={!introFinished} aria-hidden={!introFinished} onClick={()=>scroll('weather')}><MapPin size={16}/><span><b>{placeName}</b><small>{weather?`${payload?.stale?c.savedWeather:c.now} · ${weatherTime(weather.current.at,language)}`:c.navWeather}</small></span>{weather&&<><strong>{weather.current.temperature===null?'—':num(weather.current.temperature,1)}°</strong><ConditionIcon code={weather.current.code} isDay={weather.current.isDay} size={26}/></>}<ArrowUpRight size={16}/></button><div className="hero-film-controls">{!introFinished&&<button className="hero-skip-intro" onClick={skipIntro}>{c.skipIntro}<ArrowRight size={14}/></button>}<button className="hero-film-toggle" aria-label={introFinished?c.replay:playing?c.pause:c.play} title={introFinished?c.replay:playing?c.pause:c.play} onClick={toggleVideo}>{introFinished?<RotateCcw size={17}/>:playing?<Pause size={17}/>:<Play size={17}/>}</button></div></div>
+      <div className="hero-scroll" aria-hidden={!introFinished}><span>{c.scroll}</span><ArrowDown size={13}/></div>
     </section>
     <section className="for-you content-width" id="for-you"><div className="consumer-section-heading"><div><span className="consumer-eyebrow">{c.purposeEyebrow}</span><h2>{c.purposeTitle}</h2></div><p>{c.purposeText}</p></div><div className="audience-cards">{ROLES.map((value,i)=>{
       const Icon=roleIcons[value];return <button key={value} className={`audience-card ${value} ${role===value?'selected':''}`} aria-pressed={role===value} onClick={()=>pickRole(value,true)}><div className="audience-card-top"><span>0{i+1}</span><div className="audience-illustration"><Icon size={56} strokeWidth={1.1}/>{value==='garden'?<Droplets size={26} strokeWidth={1.1}/>:value==='work'?<Wind size={28} strokeWidth={1.1}/>:<Leaf size={27} strokeWidth={1.1}/>}</div><ArrowUpRight size={22}/></div><h3>{c[(value+'Title') as 'gardenTitle'|'workTitle'|'familyTitle']}</h3><p>{c[(value+'Text') as 'gardenText'|'workText'|'familyText']}</p><span className="audience-card-action">{role===value?<><Check size={14}/>{c.selected}</>:<>{c.choose}<ArrowRight size={14}/></>}</span></button>;

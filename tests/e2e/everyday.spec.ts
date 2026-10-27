@@ -27,6 +27,13 @@ test('video introduction explains the three audiences and uses current weather i
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('/');await expect(page.locator('.consumer-hero h1')).toContainText('Вода. Погода.');
   await expect(page.locator('video')).toHaveAttribute('src','/media/garden-desktop.mp4?v=orchard-20261027');
+  await expect(page.locator('video')).not.toHaveAttribute('loop');
+  await expect(page.locator('.consumer-hero-content')).toBeHidden();
+  await page.waitForFunction(()=>{const video=document.querySelector('video');return video&&video.readyState>=2&&!video.paused;});
+  await page.locator('video').evaluate((video:HTMLVideoElement)=>{video.currentTime=video.duration-.2;});
+  await expect(page.locator('.consumer-hero-content')).toBeVisible();
+  expect(await page.locator('video').evaluate((video:HTMLVideoElement)=>video.ended&&video.paused)).toBe(true);
+  await expect(page.getByRole('button',{name:'Посмотреть ещё раз',exact:true})).toBeVisible();
   await expect(page.locator('.audience-card')).toHaveCount(3);
   await expect(page.getByTestId('current-condition')).toHaveText('Ясно');
   await expect(page.getByTestId('current-temperature')).toHaveText('18°');
@@ -89,6 +96,8 @@ test('a mismatched weather response is refused instead of relabelled with the se
 test('mobile uses the portrait video, keeps the hero controls on screen and supports Tajik',async({page})=>{
   await page.setViewportSize({width:390,height:844});await page.goto('/');
   await expect(page.locator('video')).toHaveAttribute('src','/media/garden-mobile.mp4?v=orchard-20261027');
+  await page.getByRole('button',{name:'Пропустить видео',exact:true}).click();
+  await expect(page.locator('.consumer-hero-content')).toBeVisible();
   await expect(page.locator('.hero-current')).toContainText('Душанбе');
   const bounds=(await page.locator('.hero-current').boundingBox())!;
   expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(390);
@@ -97,6 +106,34 @@ test('mobile uses the portrait video, keeps the hero controls on screen and supp
   await page.getByRole('button',{name:'Кушодани меню',exact:true}).click();await page.getByRole('button',{name:'Обу ҳаво',exact:true}).click();
   await expect(page.locator('.current-city')).toHaveText('Душанбе');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('completed introduction stays stopped across reload and resizing, and replay is explicit',async({page})=>{
+  await page.goto('/');await page.getByRole('button',{name:'Пропустить видео',exact:true}).click();
+  await page.reload();await expect(page.locator('.consumer-hero-content')).toBeVisible();
+  await page.waitForFunction(()=>{const video=document.querySelector('video');return video&&video.readyState>=2&&!video.seeking&&video.currentTime>video.duration-.2;});
+  expect(await page.locator('video').evaluate((video:HTMLVideoElement)=>video.paused&&video.currentTime>video.duration-.2)).toBe(true);
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.locator('video')).toHaveAttribute('src','/media/garden-mobile.mp4?v=orchard-20261027');
+  await page.waitForFunction(()=>{const video=document.querySelector('video');return video&&video.readyState>=2&&video.currentTime>video.duration-.2;});
+  expect(await page.locator('video').evaluate((video:HTMLVideoElement)=>video.paused)).toBe(true);
+  await page.getByRole('button',{name:'Посмотреть ещё раз',exact:true}).click();
+  await expect(page.locator('.consumer-hero-content')).toBeHidden();
+  await page.waitForFunction(()=>{const video=document.querySelector('video');return video&&!video.paused&&video.currentTime<3;});
+  await page.getByRole('button',{name:'Пропустить видео',exact:true}).click();
+  await page.getByRole('button',{name:'Спланировать мой день',exact:true}).click();
+  await expect(page.locator('#for-you')).toBeInViewport();
+});
+
+test('reduced motion and denied autoplay keep the main actions available',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');
+  await expect(page.locator('.consumer-hero-content')).toBeVisible();
+  expect(await page.locator('video').evaluate((video:HTMLVideoElement)=>video.paused)).toBe(true);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.evaluate(()=>sessionStorage.removeItem('obhush-intro-orchard-20261027'));
+  await page.addInitScript(()=>{HTMLMediaElement.prototype.play=()=>Promise.reject(new DOMException('Autoplay denied','NotAllowedError'));});
+  await page.reload();await expect(page.locator('.consumer-hero-content')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Спланировать мой день',exact:true})).toBeVisible();
 });
 
 test('everyday assistant sends the selected place and task instead of a reservoir scenario',async({page})=>{

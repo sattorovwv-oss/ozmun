@@ -20,6 +20,7 @@ import ssl
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 IMAGE = 'obhush:2026-10-26'
@@ -107,20 +108,67 @@ def verify_limits(name):
 
 
 def download(url, path, expected):
+    if path.is_symlink():
+        raise RuntimeError('Refusing a symlink as the update archive')
     if path.exists():
         if digest(path) != expected:
             raise RuntimeError('Existing update archive has a different checksum')
         return
     partial = path.with_suffix(path.suffix + '.part')
-    request = urllib.request.Request(url, headers={'User-Agent': 'OBHUSH-release-installer/2'})
-    with urllib.request.urlopen(request, timeout=120) as source:
-        fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, 'wb') as dest:
-            shutil.copyfileobj(source, dest, length=1024 * 1024)
-    if digest(partial) != expected:
-        partial.unlink()
-        raise RuntimeError('Downloaded image checksum mismatch')
-    partial.rename(path)
+    if partial.is_symlink() or (partial.exists() and not partial.is_file()):
+        raise RuntimeError('Refusing an irregular partial update archive')
+    # The caller holds .update.lock. A disconnected SSH attempt may have left
+    # this exact release's partial file; resume it instead of failing O_EXCL.
+    for attempt in range(3):
+        offset = partial.stat().st_size if partial.exists() else 0
+        if offset and digest(partial) == expected:
+            partial.rename(path)
+            return
+        if offset > 1024 ** 3:
+            raise RuntimeError('Partial update archive exceeds the download budget')
+        headers = {'User-Agent': 'OBHUSH-release-installer/3'}
+        if offset:
+            headers['Range'] = 'bytes=' + str(offset) + '-'
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=30) as source:
+                status = source.status
+                if status == 206:
+                    content_range = re.fullmatch(r'bytes ([0-9]+)-([0-9]+)/([0-9]+)', source.headers.get('Content-Range', ''))
+                    if not content_range or int(content_range[1]) != offset:
+                        raise RuntimeError('Unexpected download range; partial archive retained')
+                    append = bool(offset)
+                elif status == 200:
+                    # Some servers ignore Range. Restart the archive download,
+                    # without replacing or stopping the running application.
+                    append = False
+                else:
+                    raise RuntimeError('Unexpected update download status')
+                flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_APPEND if append else os.O_TRUNC)
+                received = 0
+                fd = os.open(partial, flags, 0o600)
+                with os.fdopen(fd, 'wb') as dest:
+                    while True:
+                        chunk = source.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        received += len(chunk)
+                        if received + (offset if append else 0) > 1024 ** 3:
+                            raise RuntimeError('Update archive exceeds the download budget')
+                        dest.write(chunk)
+                declared = source.headers.get('Content-Length')
+                if declared is not None and received != int(declared):
+                    raise ConnectionError('Update download ended before its declared length')
+            if digest(partial) != expected:
+                partial.unlink()
+                raise RuntimeError('Downloaded image checksum mismatch')
+            partial.rename(path)
+            return
+        except (urllib.error.URLError, OSError, http.client.IncompleteRead) as error:
+            if attempt == 2:
+                raise RuntimeError('Update download interrupted; partial file retained for the next run') from error
+            print('Download interrupted; retrying from retained bytes…', flush=True)
+            time.sleep(2)
 
 
 def main():
